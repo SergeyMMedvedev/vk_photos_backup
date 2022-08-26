@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 from typing import List
 from cloud_disk_model import AbstractCloudDisk
@@ -36,7 +37,6 @@ class BackupService:
         photos = photos_json.get('response', {})
         if not photos.get('count'):
             raise BackupServiceException('Photos not found')
-
         for item in photos.get('items', []):
             image_url = item['sizes'][-1]['url']
             image_name = self._create_image_name(item, image_url)
@@ -44,12 +44,32 @@ class BackupService:
         self.image_likes_set.clear()
         return images_urls_list
 
-    def upload_to_cloud_disks(self, files_json: dict) -> None:
-        """Загружает файлы на облачные диски"""
-        images_names_and_urls = self._get_images_names_and_urls(files_json)
+    def save_to_local_disk(self, images_names_and_urls: List[tuple]) -> None:
+        """Сохраняет необходимые данные о фотографии на локальный диск"""
+        photos_data = []
+        for image_name, image_url in images_names_and_urls:
+            image_size = image_url[image_url.rfind('/') + 1:image_url.rfind('_')]
+            image = {
+                "file_name": image_name,
+                "size": image_size
+            }
+            photos_data.append(image)
+        with open('back_up_photos_data.json', 'w', encoding='utf-8') as f:
+            json.dump(photos_data, f, ensure_ascii=False, indent=4)
 
+    def upload_to_cloud_disks(self, images_names_and_urls: List[tuple]) -> None:
+        """Загружает файлы на облачные диски"""
         for cloud_disk in self.cloud_disks:
             cloud_disk.upload(images_names_and_urls)
+
+    def back_up_photos(self, files_json: dict) -> None:
+        """
+        Создает резервные копии на виртуальных дисках 
+        и записывает данные о сохраненных фотографиях в файл
+        """
+        images_names_and_urls = self._get_images_names_and_urls(files_json)
+        self.save_to_local_disk(images_names_and_urls)
+        self.upload_to_cloud_disks(images_names_and_urls)
 
 
 if __name__ == '__main__':
@@ -71,4 +91,4 @@ if __name__ == '__main__':
     # cloud_disks.append(g_drive)
 
     backup_service = BackupService(cloud_disks)
-    backup_service.upload_to_cloud_disks(vk_photos)
+    backup_service.back_up_photos(vk_photos)
