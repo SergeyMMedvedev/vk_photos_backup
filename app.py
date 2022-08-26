@@ -67,11 +67,17 @@ if __name__ == '__main__':
     VK_USER_ID = os.getenv('VK_USER_ID')
     YA_TOKEN = os.getenv('YA_TOKEN')
     FOLDER_NAME = 'Netology'
+    cloud_disks = []
 
     vk = VK(VK_TOKEN, VK_USER_ID)
     vk_photos = vk.get_photos()
 
     ya = YaUploader(YA_TOKEN, FOLDER_NAME)
-    g_drive = GoogleDriveService(FOLDER_NAME)
-    backup_service = BackupService([ya, g_drive])
+    cloud_disks.append(ya)
+
+    """СОХРАНЕНИЕ НА GOOGLE DISK"""
+    # g_drive = GoogleDriveService(FOLDER_NAME)
+    # cloud_disks.append(g_drive)
+
+    backup_service = BackupService(cloud_disks)
     backup_service.upload_to_cloud_disks(vk_photos)

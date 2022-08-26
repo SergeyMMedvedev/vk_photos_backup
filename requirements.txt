@@ -1,5 +1,4 @@
-dotenv
+python-dotenv
 pydrive
 requests
-dotenv
 progress
