@@ -48,15 +48,6 @@ class BackupService:
         """Загружает файлы на облачные диски"""
         images_names_and_urls = self._get_images_names_and_urls(files_json)
 
-        # TODO удалить
-        p1_url = 'https://sun9-30.userapi.com/c9884/u4470114/-6/x_a4439d91.jpg'
-        p1_name = '17_1.jpg'
-        images_names_and_urls.append((p1_name, p1_url))
-
-        p1_url = 'https://sun9-30.userapi.com/c9884/u4470114/-6/x_a4439d91.jpg'
-        p1_name = '17_2.jpg'
-        images_names_and_urls.append((p1_name, p1_url))
-
         for cloud_disk in self.cloud_disks:
             cloud_disk.upload(images_names_and_urls)
 
