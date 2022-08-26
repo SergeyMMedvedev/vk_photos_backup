@@ -6,7 +6,6 @@ from cloud_disk_model import AbstractCloudDisk
 from ya_disk_api_service import YaUploader
 from vk_api_service import VK
 from google_drive_service import GoogleDriveService
-from datetime import datetime
 
 
 class BackupServiceException(Exception):
@@ -24,8 +23,7 @@ class BackupService:
         image_likes = image['likes']['count']
         image_name = str(image_likes)
         if image_likes in self.image_likes_set:
-            image_upload_date = datetime.fromtimestamp(image['date']).strftime("%Y-%m-%d-%H-%M-%S")
-            image_name += '_' + image_upload_date
+            image_name += '_' + str(image['date'])
         self.image_likes_set.add(image_likes)
         image_extension = image_url[image_url.rfind('.'):]
         image_name += image_extension
