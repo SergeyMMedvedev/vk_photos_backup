@@ -1,117 +1,102 @@
 import requests
-import os
-from dotenv import load_dotenv
 import time
+from typing import List
+from cloud_disk_model import AbstractCloudDisk
+from utils import progress
+from progress.bar import Bar
 
-class YaUploader:
 
-    BASE_URL = 'https://cloud-api.yandex.net/v1/disk/resources'
-    GET_FILES = '/files'
-    UPLOAD_LINK = '/upload'
+class YaUploader(AbstractCloudDisk):
 
-    def __init__(self, token) -> None:
+    _BASE_URL = 'https://cloud-api.yandex.net/v1/disk/resources'
+    _GET_FILES_URL = '/files'
+    _UPLOAD_LINK_URL = '/upload'
+    _BAR_NAME = 'Yandex API: '
+
+    def __init__(self, token: str, folder_name: str) -> None:
         self.token = token
-        self.folder = r'Netolody/'
+        self.folder = folder_name
 
-    def get_headers(self):
+    @property
+    def folder(self) -> str:
+        return self._folder
+
+    @folder.setter
+    def folder(self, folder_name: str) -> None:
+        self._folder = folder_name + r'/'
+
+    def _get_headers(self) -> dict:
+        """Возвращает заголовки, наобходимые для отправки запросов к API Яндекс диска"""
         headers = {
             "Authorization": self.token,
             "Content-type": "application/json"
         }
         return headers
 
-    def get_files(self):
-        url = self.BASE_URL + self.GET_FILES
-        response = requests.get(url, headers=self.get_headers())
-        response.raise_for_status()
-        return response.json()
-
-    def _get_upload_link(self, params):
-        url = self.BASE_URL + self.UPLOAD_LINK
-        response = requests.get(url, headers=self.get_headers(), params=params)
-        response.raise_for_status()
-        response_body = response.json()
-        href = response_body.get('href', '')
-        return href
-
-    def create_resource(self):
-        url = self.BASE_URL
+    def _create_resource(self) -> None:
+        """Создает папку на Яндекс диске, где в дальнейшем будут храниться фото."""
+        url = self._BASE_URL
         params = {
             "path": self.folder,
         }
-        response = requests.put(url, headers=self.get_headers(), params=params)
+        response = requests.put(url, headers=self._get_headers(), params=params)
         response.raise_for_status()
-        if response.status_code == 201:
-            print(f'Folder {self.folder} successfully created!')
 
-    def get_resource(self):
-        url = self.BASE_URL
+    def _get_resource(self) -> requests.models.Response:
+        """Возвращает информацию о ресурсе (папке для хранения фото)"""
+        url = self._BASE_URL
         params = {
             "path": self.folder,
         }
-        response = requests.get(url, headers=self.get_headers(), params=params)
+        response = requests.get(url, headers=self._get_headers(), params=params)
         return response
 
-
-    def check_folder(self):
-        reourse_response = self.get_resource()
-        print('reourse_response.status_code', reourse_response.status_code)
+    @progress(_BAR_NAME, 'Проверка папки', '_folder')
+    def _create_folder_if_not_exist(self) -> None:
+        """
+        Проверяет, существует ли указанная папка на Яндекс диске.
+        Если нет, то запускает ее создание.
+        """
+        reourse_response = self._get_resource()
         if reourse_response.status_code == 404:
-            print(f'Creating new folder: {self.folder}...')
-            self.create_resource()
+            self._create_resource()
         else:
             reourse_response.raise_for_status()
 
-    def upload_by_link(self, image_file, image_name):
-        self.check_folder()
-        path_to_file = self.folder + image_name
-        params = {
-            "path": path_to_file,
-            "overwrite": "true"
-        }
-        url = self._get_upload_link(params)
-        response = requests.put(
-            url,
-            headers=self.get_headers(),
-            params=params,
-            data=image_file
-        )
-        response.raise_for_status()
-        if response.status_code == 201:
-            print(f'{params["path"]} successfully created!')
-
-    def upload(self, image_name, image_url):
-        self.check_folder()
-        url = self.BASE_URL + self.UPLOAD_LINK
-        path_to_file = self.folder + image_name
-        params = {
-            "path": path_to_file,
-            "url": image_url
-        }
-        print(f'Uploading {image_name} to {self.folder}...')
-        response = requests.post(
-            url,
-            headers=self.get_headers(),
-            params=params,
-        )
-        response.raise_for_status()
-        if self.check_upload(response):
-            print(f'Upload complete successfully:\n{path_to_file}')
-        else:
-            print(f'Something wrong. Check url and file path')
-
-
-    def check_upload(self, upload_response):
+    def _check_upload(self, upload_response: requests.models.Response) -> bool:
+        """Проверяет текущий статус загрузки файла ни диск"""
         href = upload_response.json().get('href')
-        status_response = requests.get(href, headers=self.get_headers())
+        status_response = requests.get(href, headers=self._get_headers())
         status_response.raise_for_status()
-        print(status_response.json())
         status = status_response.json().get('status')
         if status == 'success':
             return True
         elif status == 'in-progress':
-            print('Photo downloading to disk in progress...')
             time.sleep(1)
-            return self.check_upload(upload_response)
-            
+            return self._check_upload(upload_response)
 
+    @progress(_BAR_NAME, 'Загрузка фотографий на Яндекс Диск')
+    def upload(self, files_names_and_urls: List[tuple]) -> None:
+        """Загружает переданные файлы на Яндекс диск по url"""
+        self._create_folder_if_not_exist()
+        url = self._BASE_URL + self._UPLOAD_LINK_URL
+        with Bar(self._BAR_NAME + ' загрузка фотографий', max=len(files_names_and_urls)) as bar:
+            for image_name, image_url in files_names_and_urls:
+                path_to_file = self.folder + image_name
+                params = {
+                    "path": path_to_file,
+                    "url": image_url
+                }
+                response = requests.post(
+                    url,
+                    headers=self._get_headers(),
+                    params=params,
+                )
+                response.raise_for_status()
+                if not self._check_upload(response):
+                    print(f'Something wrong while uploading\n{image_url}\nCheck url and file path')
+                bar.next()
+
+
+class YAException(Exception):
+    pass
